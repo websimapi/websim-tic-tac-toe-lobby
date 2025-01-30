@@ -1,0 +1,71 @@
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  margin: 0;
+  padding: 20px;
+  background: #f0f0f0;
+}
+
+.container {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.lobby {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.game-board {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 20px 0;
+}
+
+.cell {
+  aspect-ratio: 1;
+  background: #eee;
+  border: none;
+  border-radius: 8px;
+  font-size: 2em;
+  cursor: pointer;
+}
+
+.cell:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.scores {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  font-size: 1.2em;
+}
+
+.status {
+  text-align: center;
+  margin: 10px 0;
+  font-weight: bold;
+}
+
+.player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.waiting {
+  text-align: center;
+  padding: 40px;
+  font-size: 1.2em;
+  color: #666;
+}
