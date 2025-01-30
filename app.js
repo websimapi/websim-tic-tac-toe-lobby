@@ -56,6 +56,8 @@ function TicTacToe() {
 
   const handleGameOver = async (data) => {
     const { winner, loser } = data;
+    if (!winner || !loser) return; // Handle tie case
+    
     const winnerScore = scores[winner];
     const loserScore = scores[loser];
     
@@ -63,20 +65,23 @@ function TicTacToe() {
     const scoreDiff = winnerScore - loserScore;
     if (scoreDiff < 50) {
       const winnerRecord = scoreRecords.find(r => r.username === winner);
-      await room.collection('scores').update(winnerRecord.id, {
-        score: winnerScore + 2
-      });
+      if (winnerRecord) {
+        await room.collection('scores').update(winnerRecord.id, {
+          score: winnerScore + 2
+        });
+      }
     }
     
     const loserRecord = scoreRecords.find(r => r.username === loser);
-    await room.collection('scores').update(loserRecord.id, {
-      score: loserScore - 1
-    });
+    if (loserRecord) {
+      await room.collection('scores').update(loserRecord.id, {
+        score: loserScore - 1
+      });
+    }
   };
 
   const makeMove = (index) => {
     if (!gameState || gameState.board[index] || gameState.winner) return;
-    
     if (gameState.currentPlayer !== room.party.client.username) return;
     
     room.send({
@@ -87,16 +92,30 @@ function TicTacToe() {
 
   // Auto-match players
   React.useEffect(() => {
-    const peersList = Object.values(peers);
-    if (peersList.length >= 2 && !gameState) {
-      const player1 = peersList[0].username;
-      const player2 = peersList[1].username;
+    // Convert peers object to array and filter out already matched players
+    const availablePeers = Object.values(peers).filter(peer => {
+      // Check if peer is not already in a game
+      return !gameState?.players.includes(peer.username);
+    });
+    
+    if (availablePeers.length >= 2 && !gameState) {
+      // Sort peers by username to ensure consistent matching across all clients
+      const sortedPeers = availablePeers.sort((a, b) => 
+        a.username.localeCompare(b.username)
+      );
       
-      if (room.party.client.username === player1) {
-        room.send({
-          type: 'startGame',
-          players: [player1, player2]
-        });
+      // Match pairs of players
+      for (let i = 0; i < sortedPeers.length - 1; i += 2) {
+        const player1 = sortedPeers[i].username;
+        const player2 = sortedPeers[i + 1].username;
+        
+        // Only the first player initiates the game to avoid duplicate games
+        if (room.party.client.username === player1) {
+          room.send({
+            type: 'startGame',
+            players: [player1, player2]
+          });
+        }
       }
     }
   }, [peers, gameState]);
@@ -108,16 +127,18 @@ function TicTacToe() {
           <h2>Waiting for opponent...</h2>
           <div className="scores">
             <h3>Current Scores:</h3>
-            {Object.entries(scores).map(([username, score]) => (
-              <div key={username} className="player">
-                <img 
-                  className="avatar" 
-                  src={`https://images.websim.ai/avatar/${username}`}
-                  alt={username}
-                />
-                <span>{username}: {score}</span>
-              </div>
-            ))}
+            {Object.entries(scores)
+              .sort(([,a], [,b]) => b - a) // Sort by score descending
+              .map(([username, score]) => (
+                <div key={username} className="player">
+                  <img 
+                    className="avatar" 
+                    src={`https://images.websim.ai/avatar/${username}`}
+                    alt={username}
+                  />
+                  <span>{username}: {score}</span>
+                </div>
+              ))}
           </div>
         </div>
       </div>
@@ -170,9 +191,7 @@ function TicTacToe() {
   );
 }
 
-ReactDOM.render(<TicTacToe />, document.getElementById('root'));
-
-// Game logic on server side
+// Game logic
 room.onmessage = (event) => {
   const { type, ...data } = event.data;
   
@@ -199,7 +218,7 @@ room.onmessage = (event) => {
       const newBoard = [...gameState.board];
       newBoard[data.index] = gameState.currentPlayer === gameState.players[0] ? 'X' : 'O';
       
-      const winner = calculateWinner(newBoard);
+      const winner = calculateWinner(newBoard, gameState);
       const tie = !winner && newBoard.every(cell => cell);
       
       const newState = {
@@ -221,18 +240,18 @@ room.onmessage = (event) => {
         room.send({
           type: 'gameOver',
           winner: winner,
-          loser: gameState.players.find(p => p !== winner)
+          loser: winner ? gameState.players.find(p => p !== winner) : null
         });
       }
       break;
   }
 };
 
-function calculateWinner(board) {
+function calculateWinner(board, gameState) {
   const lines = [
-    [0, 1, 2], [3, 4, 5], [6, 7, 8], // rows
-    [0, 3, 6], [1, 4, 7], [2, 5, 8], // columns
-    [0, 4, 8], [2, 4, 6] // diagonals
+    [0, 1, 2], [3, 4, 5], [6, 7, 8],
+    [0, 3, 6], [1, 4, 7], [2, 5, 8],
+    [0, 4, 8], [2, 4, 6]
   ];
   
   for (const [a, b, c] of lines) {
@@ -243,3 +262,5 @@ function calculateWinner(board) {
   
   return null;
 }
+
+ReactDOM.render(<TicTacToe />, document.getElementById('root'));
