@@ -78,6 +78,11 @@ function TicTacToe() {
         score: loserScore - 1
       });
     }
+    
+    // Clear game state after a short delay
+    setTimeout(() => {
+      setGameState(null);
+    }, 2000);
   };
 
   const makeMove = (index) => {
@@ -86,36 +91,51 @@ function TicTacToe() {
     
     room.send({
       type: 'move',
-      index
+      index,
+      gameState // Include current game state with the move
     });
   };
 
   // Auto-match players
   React.useEffect(() => {
-    // Convert peers object to array and filter out already matched players
-    const availablePeers = Object.values(peers).filter(peer => {
-      // Check if peer is not already in a game
-      return !gameState?.players.includes(peer.username);
+    if (gameState) return; // Don't match if already in a game
+
+    const peerList = Object.values(peers);
+    if (peerList.length < 2) return; // Need at least 2 players
+
+    // Get current games to check who's already playing
+    const activePlayers = new Set();
+    peerList.forEach(peer => {
+      if (peer.gameState) {
+        activePlayers.add(peer.username);
+      }
     });
-    
-    if (availablePeers.length >= 2 && !gameState) {
-      // Sort peers by username to ensure consistent matching across all clients
-      const sortedPeers = availablePeers.sort((a, b) => 
-        a.username.localeCompare(b.username)
-      );
-      
-      // Match pairs of players
-      for (let i = 0; i < sortedPeers.length - 1; i += 2) {
-        const player1 = sortedPeers[i].username;
-        const player2 = sortedPeers[i + 1].username;
-        
-        // Only the first player initiates the game to avoid duplicate games
-        if (room.party.client.username === player1) {
-          room.send({
-            type: 'startGame',
-            players: [player1, player2]
-          });
-        }
+
+    // Find available players (not in a game)
+    const availablePlayers = peerList
+      .filter(peer => !activePlayers.has(peer.username))
+      .map(peer => peer.username)
+      .sort(); // Sort for consistent matching
+
+    if (availablePlayers.length >= 2) {
+      // Match first two available players
+      const player1 = availablePlayers[0];
+      const player2 = availablePlayers[1];
+
+      // Only the first player initiates the game
+      if (room.party.client.username === player1) {
+        const initialState = {
+          board: Array(9).fill(null),
+          players: [player1, player2],
+          currentPlayer: player1,
+          winner: null,
+          tie: false
+        };
+
+        room.send({
+          type: 'gameState',
+          state: initialState
+        });
       }
     }
   }, [peers, gameState]);
@@ -128,7 +148,7 @@ function TicTacToe() {
           <div className="scores">
             <h3>Current Scores:</h3>
             {Object.entries(scores)
-              .sort(([,a], [,b]) => b - a) // Sort by score descending
+              .sort(([,a], [,b]) => b - a)
               .map(([username, score]) => (
                 <div key={username} className="player">
                   <img 
@@ -196,37 +216,21 @@ room.onmessage = (event) => {
   const { type, ...data } = event.data;
   
   switch (type) {
-    case 'startGame':
-      const initialState = {
-        board: Array(9).fill(null),
-        players: data.players,
-        currentPlayer: data.players[0],
-        winner: null,
-        tie: false
-      };
-      
-      room.send({
-        type: 'gameState',
-        state: initialState
-      });
-      break;
-      
     case 'move':
-      const gameState = event.gameState;
-      if (!gameState) break;
+      if (!data.gameState) break;
       
-      const newBoard = [...gameState.board];
-      newBoard[data.index] = gameState.currentPlayer === gameState.players[0] ? 'X' : 'O';
+      const newBoard = [...data.gameState.board];
+      newBoard[data.index] = data.gameState.currentPlayer === data.gameState.players[0] ? 'X' : 'O';
       
-      const winner = calculateWinner(newBoard, gameState);
+      const winner = calculateWinner(newBoard, data.gameState);
       const tie = !winner && newBoard.every(cell => cell);
       
       const newState = {
-        ...gameState,
+        ...data.gameState,
         board: newBoard,
-        currentPlayer: gameState.currentPlayer === gameState.players[0] 
-          ? gameState.players[1] 
-          : gameState.players[0],
+        currentPlayer: data.gameState.currentPlayer === data.gameState.players[0] 
+          ? data.gameState.players[1] 
+          : data.gameState.players[0],
         winner: winner,
         tie: tie
       };
@@ -240,7 +244,7 @@ room.onmessage = (event) => {
         room.send({
           type: 'gameOver',
           winner: winner,
-          loser: winner ? gameState.players.find(p => p !== winner) : null
+          loser: winner ? data.gameState.players.find(p => p !== winner) : null
         });
       }
       break;
